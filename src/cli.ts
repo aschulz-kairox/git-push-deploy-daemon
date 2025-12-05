@@ -20,6 +20,9 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     workers: { type: 'string', short: 'w' },
+    'health-url': { type: 'string' },
+    'health-interval': { type: 'string' },
+    'health-threshold': { type: 'string' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
   },
@@ -72,17 +75,22 @@ ${chalk.bold('Usage:')}
   gpdd status                     Show master and worker status
 
 ${chalk.bold('Options:')}
-  -w, --workers <n>   Number of workers (default: CPU count)
-  -h, --help          Show this help
-  -v, --version       Show version
+  -w, --workers <n>       Number of workers (default: CPU count)
+  --health-url <url>      Health check endpoint (e.g., http://localhost:3000/health)
+  --health-interval <ms>  Health check interval (default: 30000)
+  --health-threshold <n>  Failures before reload (default: 3)
+  -h, --help              Show this help
+  -v, --version           Show version
 
 ${chalk.bold('Examples:')}
   gpdd start dist/index.js -w 4
+  gpdd start dist/index.js --health-url http://localhost:3000/health
   gpdd reload
   gpdd stop
 
 ${chalk.bold('Environment:')}
   GPDD_WORKERS        Number of workers
+  GPDD_HEALTH_URL     Health check URL
   GPDD_GRACE_TIMEOUT  Shutdown timeout in ms (default: 30000)
   GPDD_READY_TIMEOUT  Worker ready timeout in ms (default: 10000)
 `);
@@ -111,8 +119,18 @@ async function handleStart() {
 
   const numWorkers = parseInt(values.workers || process.env.GPDD_WORKERS || '0', 10);
   
+  // Health check options
+  const healthUrl = values['health-url'] || process.env.GPDD_HEALTH_URL;
+  const healthCheck = healthUrl
+    ? {
+        url: healthUrl,
+        interval: parseInt(values['health-interval'] || '30000', 10),
+        threshold: parseInt(values['health-threshold'] || '3', 10),
+      }
+    : undefined;
+
   console.log(chalk.blue(`Starting ${appFile}...`));
-  await startMaster(appFile, { numWorkers });
+  await startMaster(appFile, { numWorkers, healthCheck });
 }
 
 async function handleReload() {

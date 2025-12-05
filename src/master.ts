@@ -6,6 +6,7 @@
  * - Manage worker lifecycle (fork, monitor, restart)
  * - Handle reload signals (SIGHUP)
  * - Graceful shutdown (SIGTERM, SIGINT)
+ * - Health check monitoring (optional)
  */
 
 import cluster, { Worker } from 'node:cluster';
@@ -14,11 +15,13 @@ import path from 'node:path';
 import chalk from 'chalk';
 import { writePidFile, removePidFile } from './pid.js';
 import { startStatusServer, stopStatusServer, getState } from './ipc.js';
+import { startHealthCheck, stopHealthCheck, type HealthCheckOptions } from './health.js';
 
 export interface MasterOptions {
   numWorkers?: number;
   graceTimeout?: number;
   readyTimeout?: number;
+  healthCheck?: HealthCheckOptions;
 }
 
 interface WorkerInfo {
@@ -66,7 +69,16 @@ export async function startMaster(app: string, options: MasterOptions = {}): Pro
   for (let i = 0; i < numWorkers; i++) {
     forkWorker();
   }
-  
+
+  // Start health check if configured
+  if (options.healthCheck) {
+    startHealthCheck(options.healthCheck, (result) => {
+      console.log(chalk.red(`Health check failed: ${result.error || 'unhealthy'}`));
+      console.log(chalk.yellow('Triggering reload due to health check failure...'));
+      handleReload();
+    });
+  }
+
   // Handle worker messages
   cluster.on('message', (worker, message) => {
     if (message === 'ready') {
@@ -294,4 +306,5 @@ function getNextWorkerId(): number {
 function cleanup() {
   removePidFile();
   stopStatusServer();
+  stopHealthCheck();
 }

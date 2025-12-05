@@ -6,7 +6,15 @@ import http from 'node:http';
 
 const PORT = process.env.PORT || 3000;
 
-const server = http.createServer((_req, res) => {
+const server = http.createServer((req, res) => {
+  // Health endpoint
+  if (req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', pid: process.pid }));
+    return;
+  }
+
+  // Default response
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
     pid: process.pid,
