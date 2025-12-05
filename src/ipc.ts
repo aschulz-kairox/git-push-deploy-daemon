@@ -18,12 +18,27 @@ export interface WorkerStatus {
   pid: number;
   state: string;
   startTime: number;
+  /** Memory usage in MB (RSS - Resident Set Size) */
+  memoryMB?: number;
+}
+
+export interface SystemMemory {
+  /** Total system memory in MB */
+  totalMB: number;
+  /** Free memory in MB (actually available) */
+  freeMB: number;
+  /** Free memory percentage */
+  freePercent: number;
 }
 
 export interface RuntimeStatus {
   appFile: string;
   startTime: number;
   workers: WorkerStatus[];
+  /** Total memory of all workers in MB */
+  appMemoryMB?: number;
+  /** System memory info */
+  system?: SystemMemory;
 }
 
 const PORT_FILE = PID_FILE.replace('.pid', '.port');
@@ -207,6 +222,45 @@ export async function sendCommand(command: 'reload' | 'stop'): Promise<boolean> 
 }
 
 /**
+ * Get process memory usage in MB from /proc/[pid]/status (Linux only)
+ */
+function getProcessMemoryMB(pid: number): number | undefined {
+  try {
+    const statusPath = `/proc/${pid}/status`;
+    const content = fs.readFileSync(statusPath, 'utf-8');
+    const vmRssMatch = content.match(/VmRSS:\s*(\d+)\s*kB/);
+    if (vmRssMatch) {
+      return Math.round(parseInt(vmRssMatch[1], 10) / 1024);
+    }
+  } catch {
+    // Not Linux or process doesn't exist
+  }
+  return undefined;
+}
+
+/**
+ * Get system memory info from /proc/meminfo (Linux only)
+ */
+function getSystemMemory(): SystemMemory | undefined {
+  try {
+    const content = fs.readFileSync('/proc/meminfo', 'utf-8');
+    const memTotalMatch = content.match(/MemTotal:\s*(\d+)\s*kB/);
+    const memAvailableMatch = content.match(/MemAvailable:\s*(\d+)\s*kB/);
+    
+    if (memTotalMatch && memAvailableMatch) {
+      const totalMB = Math.round(parseInt(memTotalMatch[1], 10) / 1024);
+      const freeMB = Math.round(parseInt(memAvailableMatch[1], 10) / 1024);
+      const freePercent = Math.round((freeMB / totalMB) * 100);
+      
+      return { totalMB, freeMB, freePercent };
+    }
+  } catch {
+    // Not Linux
+  }
+  return undefined;
+}
+
+/**
  * Build status object (used by master)
  */
 export function getState(
@@ -214,14 +268,22 @@ export function getState(
   startTime: number,
   workers: Map<number, { id: number; pid: number; state: string; startTime: number }>
 ): RuntimeStatus {
+  const workerList = Array.from(workers.values()).map(w => ({
+    id: w.id,
+    pid: w.pid,
+    state: w.state,
+    startTime: w.startTime,
+    memoryMB: getProcessMemoryMB(w.pid),
+  }));
+  
+  // Sum up all worker memory for app total
+  const appMemoryMB = workerList.reduce((sum, w) => sum + (w.memoryMB || 0), 0) || undefined;
+  
   return {
     appFile,
     startTime,
-    workers: Array.from(workers.values()).map(w => ({
-      id: w.id,
-      pid: w.pid,
-      state: w.state,
-      startTime: w.startTime,
-    })),
+    workers: workerList,
+    appMemoryMB,
+    system: getSystemMemory(),
   };
 }
