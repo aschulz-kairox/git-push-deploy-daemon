@@ -38,6 +38,7 @@ let appFile: string;
 let workers: Map<number, WorkerInfo> = new Map();
 let isShuttingDown = false;
 let isReloading = false;
+let isScalingDown = false;
 let startTime: number;
 let readyUrl: string | undefined;
 
@@ -123,7 +124,7 @@ export async function startMaster(app: string, options: MasterOptions = {}): Pro
         cleanup();
         process.exit(0);
       }
-    } else if (!isReloading) {
+    } else if (!isReloading && !isScalingDown) {
       // Unexpected exit - restart
       console.log(chalk.yellow(`Worker ${workerId} died (${signal || code}), restarting...`));
       forkWorker();
@@ -273,8 +274,8 @@ function handleScaleUp() {
  * Scale down: Remove one worker (gracefully)
  */
 async function handleScaleDown() {
-  if (isShuttingDown || isReloading) {
-    console.log(chalk.yellow('Cannot scale down during shutdown/reload'));
+  if (isShuttingDown || isReloading || isScalingDown) {
+    console.log(chalk.yellow('Cannot scale down during shutdown/reload/scale'));
     return;
   }
   
@@ -282,6 +283,8 @@ async function handleScaleDown() {
     console.log(chalk.yellow('Cannot scale down: minimum 1 worker required'));
     return;
   }
+  
+  isScalingDown = true;
   
   // Get the oldest worker (lowest ID)
   const sortedWorkers = Array.from(workers.entries()).sort((a, b) => a[0] - b[0]);
@@ -304,6 +307,7 @@ async function handleScaleDown() {
   }
   
   workers.delete(id);
+  isScalingDown = false;
   console.log(chalk.green(`✓ Worker ${id} removed`));
 }
 
