@@ -1,18 +1,19 @@
-# gpd-runtime
+# git-push-deploy-daemon
 
-Zero-downtime Node.js cluster runtime. The runtime companion to [gpd](https://github.com/aschulz-kairox/git-push-deploy-cli) (git-push-deploy).
+Zero-downtime Node.js cluster daemon. The process management companion to [git-push-deploy-cli](https://github.com/aschulz-kairox/git-push-deploy-cli).
 
 ## Why?
 
 PM2 is great, but sometimes you want:
-- **Simplicity** - No daemon, no global state, just a process
+
+- **Simplicity** - No background daemon, no global state, just a process
 - **Transparency** - Cluster logic you can understand and debug
 - **Integration** - Works seamlessly with gpd deployments
 
 ## Installation
 
 ```bash
-npm install -g gpd-runtime
+npm install -g git-push-deploy-daemon
 ```
 
 ## Usage
@@ -21,33 +22,32 @@ npm install -g gpd-runtime
 
 ```bash
 # Start with 4 workers (default: CPU count)
-gpdr start app.js --workers 4
+gpdd start app.js --workers 4
 
 # With environment
-NODE_ENV=production gpdr start dist/index.js
+NODE_ENV=production gpdd start dist/index.js
 ```
 
 ### Zero-Downtime Reload
 
 ```bash
 # Reload all workers one by one (no dropped connections)
-gpdr reload
+gpdd reload
 
 # Or send SIGHUP to master process
-kill -HUP $(cat .gpd-runtime.pid)
+kill -HUP $(cat .gpdd.pid)
 ```
 
 ### Other Commands
 
 ```bash
-gpdr status    # Show master + worker status
-gpdr stop      # Graceful shutdown
-gpdr logs      # Tail stdout/stderr
+gpdd status    # Show master + worker status
+gpdd stop      # Graceful shutdown
 ```
 
 ## How It Works
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
 │                    Master                        │
 │  • Holds the server socket                      │
@@ -73,14 +73,14 @@ gpdr logs      # Tail stdout/stderr
 
 **Result:** Zero dropped connections!
 
-## Integration with gpd
+## Integration with git-push-deploy-cli
 
 ```json
 // .git-deploy.json
 {
   "services": {
     "my-api": {
-      "processManager": "gpdr",
+      "processManager": "gpdd",
       "entryPoint": "dist/index.js",
       "workers": 4
     }
@@ -88,7 +88,7 @@ gpdr logs      # Tail stdout/stderr
 }
 ```
 
-Then gpd will use `gpdr reload` instead of `pm2 reload`.
+Then `gpd deploy` will use `gpdd reload` instead of `pm2 reload`.
 
 ## Application Requirements
 
@@ -117,9 +117,9 @@ process.on('message', (msg) => {
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `GPDR_WORKERS` | Number of workers | CPU count |
-| `GPDR_GRACE_TIMEOUT` | Shutdown timeout (ms) | 30000 |
-| `GPDR_READY_TIMEOUT` | Worker ready timeout (ms) | 10000 |
+| `GPDD_WORKERS` | Number of workers | CPU count |
+| `GPDD_GRACE_TIMEOUT` | Shutdown timeout (ms) | 30000 |
+| `GPDD_READY_TIMEOUT` | Worker ready timeout (ms) | 10000 |
 
 ## Signals
 

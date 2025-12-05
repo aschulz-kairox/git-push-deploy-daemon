@@ -1,5 +1,4 @@
 node_modules/
 dist/
 *.log
-.gpd-runtime.pid
-.gpd-runtime.sock
+.gpdd.pid

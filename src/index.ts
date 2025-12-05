@@ -1,14 +1,14 @@
 /**
- * gpd-runtime
+ * git-push-deploy-daemon
  * 
- * Zero-downtime Node.js cluster runtime.
+ * Zero-downtime Node.js cluster daemon.
  * 
  * @example
  * ```bash
- * gpdr start dist/index.js -w 4   # Start with 4 workers
- * gpdr reload                      # Zero-downtime reload
- * gpdr stop                        # Graceful shutdown
- * gpdr status                      # Show status
+ * gpdd start dist/index.js -w 4   # Start with 4 workers
+ * gpdd reload                      # Zero-downtime reload
+ * gpdd stop                        # Graceful shutdown
+ * gpdd status                      # Show status
  * ```
  */
 

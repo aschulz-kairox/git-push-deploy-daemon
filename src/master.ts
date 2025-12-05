@@ -35,8 +35,8 @@ let isShuttingDown = false;
 let isReloading = false;
 let startTime: number;
 
-const GRACE_TIMEOUT = parseInt(process.env.GPDR_GRACE_TIMEOUT || '30000', 10);
-const READY_TIMEOUT = parseInt(process.env.GPDR_READY_TIMEOUT || '10000', 10);
+const GRACE_TIMEOUT = parseInt(process.env.GPDD_GRACE_TIMEOUT || '30000', 10);
+const READY_TIMEOUT = parseInt(process.env.GPDD_READY_TIMEOUT || '10000', 10);
 
 /**
  * Start the master process
@@ -45,7 +45,7 @@ export async function startMaster(app: string, options: MasterOptions = {}): Pro
   appFile = path.resolve(app);
   startTime = Date.now();
   
-  const numWorkers = options.numWorkers || parseInt(process.env.GPDR_WORKERS || '0', 10) || os.cpus().length;
+  const numWorkers = options.numWorkers || parseInt(process.env.GPDD_WORKERS || '0', 10) || os.cpus().length;
   
   console.log(chalk.blue(`Master PID: ${process.pid}`));
   console.log(chalk.blue(`Workers: ${numWorkers}`));

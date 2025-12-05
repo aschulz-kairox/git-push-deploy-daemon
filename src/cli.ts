@@ -63,13 +63,13 @@ async function main() {
 
 function showHelp() {
   console.log(`
-${chalk.bold('gpd-runtime')} - Zero-downtime Node.js cluster runtime
+${chalk.bold('git-push-deploy-daemon')} - Zero-downtime Node.js cluster daemon
 
 ${chalk.bold('Usage:')}
-  gpdr start <app.js> [options]   Start master + workers
-  gpdr reload                     Zero-downtime reload all workers
-  gpdr stop                       Graceful shutdown
-  gpdr status                     Show master and worker status
+  gpdd start <app.js> [options]   Start master + workers
+  gpdd reload                     Zero-downtime reload all workers
+  gpdd stop                       Graceful shutdown
+  gpdd status                     Show master and worker status
 
 ${chalk.bold('Options:')}
   -w, --workers <n>   Number of workers (default: CPU count)
@@ -77,14 +77,14 @@ ${chalk.bold('Options:')}
   -v, --version       Show version
 
 ${chalk.bold('Examples:')}
-  gpdr start dist/index.js -w 4
-  gpdr reload
-  gpdr stop
+  gpdd start dist/index.js -w 4
+  gpdd reload
+  gpdd stop
 
 ${chalk.bold('Environment:')}
-  GPDR_WORKERS        Number of workers
-  GPDR_GRACE_TIMEOUT  Shutdown timeout in ms (default: 30000)
-  GPDR_READY_TIMEOUT  Worker ready timeout in ms (default: 10000)
+  GPDD_WORKERS        Number of workers
+  GPDD_GRACE_TIMEOUT  Shutdown timeout in ms (default: 30000)
+  GPDD_READY_TIMEOUT  Worker ready timeout in ms (default: 10000)
 `);
 }
 
@@ -109,7 +109,7 @@ async function handleStart() {
     }
   }
 
-  const numWorkers = parseInt(values.workers || process.env.GPDR_WORKERS || '0', 10);
+  const numWorkers = parseInt(values.workers || process.env.GPDD_WORKERS || '0', 10);
   
   console.log(chalk.blue(`Starting ${appFile}...`));
   await startMaster(appFile, { numWorkers });

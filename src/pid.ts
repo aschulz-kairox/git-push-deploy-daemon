@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const PID_FILE = path.resolve('.gpd-runtime.pid');
+export const PID_FILE = path.resolve('.gpdd.pid');
 
 /**
  * Write PID to file
