@@ -217,25 +217,32 @@ async function handleReload() {
     
     // 1. Fork new worker
     const newWorker = forkWorker();
+    const newWorkerId = getLastWorkerId();
     
-    // 2. Wait for new worker to be ready
-    const ready = await waitForReady(newWorker);
+    // 2. Wait for new worker to be ready (via readyUrl polling or process.send('ready'))
+    const ready = await waitForWorkerReady(newWorkerId);
     if (!ready) {
       console.log(chalk.red(`New worker failed to start, keeping old worker ${id}`));
       newWorker.kill();
+      workers.delete(newWorkerId);
       continue;
     }
     
-    // 3. Tell old worker to drain
+    // 3. Gracefully stop old worker
     const oldWorker = findClusterWorker(info.pid);
     if (oldWorker) {
       info.state = 'draining';
-      console.log(chalk.gray(`Draining worker ${id}...`));
+      console.log(chalk.gray(`Stopping old worker ${id} (PID ${info.pid})...`));
       
-      // Send shutdown message
-      oldWorker.send('shutdown');
+      // Try sending shutdown message (worker may or may not handle it)
+      try {
+        oldWorker.send('shutdown');
+      } catch {
+        // Ignore - worker may not have IPC
+      }
       
-      // Wait for graceful exit or timeout
+      // Disconnect and kill with timeout
+      oldWorker.disconnect();
       await waitForExit(oldWorker, GRACE_TIMEOUT);
     }
     
@@ -353,6 +360,48 @@ function findClusterWorker(pid: number): Worker | undefined {
 let nextWorkerId = 0;
 function getNextWorkerId(): number {
   return ++nextWorkerId;
+}
+
+/**
+ * Get the last assigned worker ID
+ */
+function getLastWorkerId(): number {
+  return nextWorkerId;
+}
+
+/**
+ * Wait for a worker to become ready (by polling workers Map)
+ * Works with both readyUrl polling and process.send('ready')
+ */
+function waitForWorkerReady(workerId: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const deadline = Date.now() + READY_TIMEOUT;
+    
+    const check = () => {
+      const info = workers.get(workerId);
+      if (!info) {
+        // Worker died
+        resolve(false);
+        return;
+      }
+      
+      if (info.state === 'ready') {
+        resolve(true);
+        return;
+      }
+      
+      if (Date.now() >= deadline) {
+        console.log(chalk.yellow(`Worker ${workerId} ready timeout`));
+        resolve(false);
+        return;
+      }
+      
+      // Check again in 100ms
+      setTimeout(check, 100);
+    };
+    
+    check();
+  });
 }
 
 /**

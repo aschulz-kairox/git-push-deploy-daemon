@@ -150,7 +150,6 @@ ${chalk.bold('Examples:')}
   gpdd start dist/index.js -w 4
   gpdd start dist/index.js -d              # Run in background
   gpdd start dist/index.js --ready-url http://localhost:3000/health
-  gpdd start dist/index.js --health-url http://localhost:3000/health
   gpdd reload
   gpdd stop
 
@@ -160,6 +159,10 @@ ${chalk.bold('Environment:')}
   GPDD_HEALTH_URL     Health check URL (ongoing monitoring)
   GPDD_GRACE_TIMEOUT  Shutdown timeout in ms (default: 30000)
   GPDD_READY_TIMEOUT  Worker ready timeout in ms (default: 10000)
+
+${chalk.bold('Multi-Service Management:')}
+  Use 'gpd daemon all start|stop|reload|status' for batch operations.
+  See git-push-deploy-cli for details.
 `);
 }
 
