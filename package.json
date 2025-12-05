@@ -1,6 +1,6 @@
 {
   "name": "git-push-deploy-daemon",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Zero-downtime Node.js cluster daemon - the runtime companion to git-push-deploy-cli",
   "keywords": [
     "cluster",

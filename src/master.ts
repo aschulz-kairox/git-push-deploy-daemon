@@ -57,8 +57,15 @@ export async function startMaster(app: string, options: MasterOptions = {}): Pro
   // Write PID file
   writePidFile(process.pid);
   
-  // Start IPC status server
-  await startStatusServer(() => getState(appFile, startTime, workers));
+  // Start IPC server with command handler
+  const port = await startStatusServer(
+    () => getState(appFile, startTime, workers),
+    (cmd) => {
+      if (cmd === 'reload') handleReload();
+      if (cmd === 'stop') handleShutdown();
+    }
+  );
+  console.log(chalk.gray(`IPC server on port ${port}`));
   
   // Setup cluster
   cluster.setupPrimary({

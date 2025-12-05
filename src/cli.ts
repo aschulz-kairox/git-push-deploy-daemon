@@ -12,7 +12,7 @@
 import { parseArgs } from 'node:util';
 import chalk from 'chalk';
 import { startMaster } from './master.js';
-import { getStatus } from './ipc.js';
+import { getStatus, sendCommand } from './ipc.js';
 import { readPidFile, PID_FILE } from './pid.js';
 import fs from 'node:fs';
 
@@ -141,17 +141,31 @@ async function handleReload() {
     process.exit(1);
   }
 
-  console.log(chalk.blue(`Sending reload signal to PID ${pid}...`));
+  console.log(chalk.blue(`Sending reload command to PID ${pid}...`));
   
-  try {
-    process.kill(pid, 'SIGHUP');
-    console.log(chalk.green('✓ Reload signal sent'));
+  // Try IPC first (works on Windows and Linux)
+  const success = await sendCommand('reload');
+  if (success) {
+    console.log(chalk.green('✓ Reload command sent via IPC'));
     console.log(chalk.gray('Workers will be reloaded one by one'));
-  } catch (error) {
-    console.error(chalk.red(`Error: Could not signal process ${pid}`));
-    console.error(chalk.gray('The process may have crashed. Check logs.'));
-    process.exit(1);
+    return;
   }
+
+  // Fallback to SIGHUP on Unix
+  if (process.platform !== 'win32') {
+    try {
+      process.kill(pid, 'SIGHUP');
+      console.log(chalk.green('✓ Reload signal sent via SIGHUP'));
+      console.log(chalk.gray('Workers will be reloaded one by one'));
+      return;
+    } catch {
+      // Fall through to error
+    }
+  }
+
+  console.error(chalk.red(`Error: Could not send reload command to PID ${pid}`));
+  console.error(chalk.gray('The process may have crashed. Check logs.'));
+  process.exit(1);
 }
 
 async function handleStop() {
@@ -163,29 +177,47 @@ async function handleStop() {
 
   console.log(chalk.blue(`Stopping PID ${pid}...`));
   
-  try {
-    process.kill(pid, 'SIGTERM');
-    console.log(chalk.green('✓ Stop signal sent'));
-    console.log(chalk.gray('Waiting for graceful shutdown...'));
-    
-    // Wait for process to exit
-    let tries = 0;
-    while (tries < 60) {
-      await new Promise(r => setTimeout(r, 500));
-      try {
-        process.kill(pid, 0);
-        tries++;
-      } catch {
-        console.log(chalk.green('✓ Stopped'));
-        return;
-      }
+  // Try IPC first (works on Windows and Linux)
+  const success = await sendCommand('stop');
+  if (success) {
+    console.log(chalk.green('✓ Stop command sent via IPC'));
+  } else if (process.platform !== 'win32') {
+    // Fallback to SIGTERM on Unix
+    try {
+      process.kill(pid, 'SIGTERM');
+      console.log(chalk.green('✓ Stop signal sent via SIGTERM'));
+    } catch (error) {
+      console.error(chalk.red(`Error: Could not signal process ${pid}`));
+      process.exit(1);
     }
-    
-    console.log(chalk.yellow('Process still running after 30s, sending SIGKILL...'));
-    process.kill(pid, 'SIGKILL');
-  } catch (error) {
-    console.error(chalk.red(`Error: Could not signal process ${pid}`));
+  } else {
+    console.error(chalk.red(`Error: Could not send stop command to PID ${pid}`));
     process.exit(1);
+  }
+  
+  console.log(chalk.gray('Waiting for graceful shutdown...'));
+  
+  // Wait for process to exit
+  let tries = 0;
+  while (tries < 60) {
+    await new Promise(r => setTimeout(r, 500));
+    try {
+      process.kill(pid, 0);
+      tries++;
+    } catch {
+      console.log(chalk.green('✓ Stopped'));
+      return;
+    }
+  }
+  
+  console.log(chalk.yellow('Process still running after 30s'));
+  if (process.platform !== 'win32') {
+    console.log(chalk.yellow('Sending SIGKILL...'));
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // Ignore
+    }
   }
 }
 
@@ -204,7 +236,7 @@ async function handleStatus() {
   }
 
   // Get detailed status via IPC
-  const status = await getStatus(pid);
+  const status = await getStatus();
   
   if (status) {
     console.log(chalk.bold('gpd-runtime Status'));
