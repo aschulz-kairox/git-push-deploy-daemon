@@ -161,9 +161,37 @@ gpdd reload
 │ Options        │                                                           │
 ├────────────────┼───────────────────────────────────────────────────────────┤
 │ -w, --workers  │ Number of workers (default: CPU count)                    │
+│ -d, --daemon   │ Run in background (detached mode)                         │
+│ --ready-url    │ URL to poll for ready check (e.g., http://localhost:3000) │
 │ -n, --lines    │ Number of log lines to show                               │
 │ -f, --follow   │ Follow logs in real-time                                  │
 └────────────────┴───────────────────────────────────────────────────────────┘
+```
+
+## 📊 IPC API (HTTP)
+
+GPDD exposes a local HTTP API for status and control:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/status` | GET | Runtime status (workers, memory, uptime) |
+| `/reload` | POST | Trigger zero-downtime reload |
+| `/stop` | POST | Graceful shutdown |
+| `/scale/up` | POST | Add one worker |
+| `/scale/down` | POST | Remove one worker (graceful) |
+
+The `/status` endpoint returns:
+
+```json
+{
+  "appFile": "/app/dist/index.js",
+  "startTime": 1733436189756,
+  "workers": [
+    { "id": 1, "pid": 12345, "state": "ready", "startTime": 1733436189768, "memoryMB": 92 }
+  ],
+  "appMemoryMB": 92,
+  "system": { "totalMB": 8063, "freeMB": 6894, "freePercent": 86 }
+}
 ```
 
 ## 🔧 Integration with GPD
