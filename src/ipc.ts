@@ -115,6 +115,30 @@ export function startStatusServer(
         return;
       }
 
+      if (req.method === 'POST' && req.url === '/scale/up') {
+        if (commandCallback) {
+          commandCallback('scale-up');
+          res.writeHead(200);
+          res.end(JSON.stringify({ ok: true, command: 'scale-up' }));
+        } else {
+          res.writeHead(500);
+          res.end(JSON.stringify({ ok: false, error: 'no handler' }));
+        }
+        return;
+      }
+
+      if (req.method === 'POST' && req.url === '/scale/down') {
+        if (commandCallback) {
+          commandCallback('scale-down');
+          res.writeHead(200);
+          res.end(JSON.stringify({ ok: true, command: 'scale-down' }));
+        } else {
+          res.writeHead(500);
+          res.end(JSON.stringify({ ok: false, error: 'no handler' }));
+        }
+        return;
+      }
+
       res.writeHead(404);
       res.end(JSON.stringify({ error: 'not found' }));
     });

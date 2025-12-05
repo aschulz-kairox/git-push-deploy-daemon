@@ -71,6 +71,8 @@ export async function startMaster(app: string, options: MasterOptions = {}): Pro
     (cmd) => {
       if (cmd === 'reload') handleReload();
       if (cmd === 'stop') handleShutdown();
+      if (cmd === 'scale-up') handleScaleUp();
+      if (cmd === 'scale-down') handleScaleDown();
     }
   );
   console.log(chalk.gray(`IPC server on port ${port}`));
@@ -252,6 +254,57 @@ async function handleReload() {
   
   isReloading = false;
   console.log(chalk.green('✓ Reload complete'));
+}
+
+/**
+ * Scale up: Add one worker
+ */
+function handleScaleUp() {
+  if (isShuttingDown) {
+    console.log(chalk.yellow('Cannot scale up during shutdown'));
+    return;
+  }
+  
+  console.log(chalk.blue('Scaling up: adding 1 worker...'));
+  forkWorker();
+}
+
+/**
+ * Scale down: Remove one worker (gracefully)
+ */
+async function handleScaleDown() {
+  if (isShuttingDown || isReloading) {
+    console.log(chalk.yellow('Cannot scale down during shutdown/reload'));
+    return;
+  }
+  
+  if (workers.size <= 1) {
+    console.log(chalk.yellow('Cannot scale down: minimum 1 worker required'));
+    return;
+  }
+  
+  // Get the oldest worker (lowest ID)
+  const sortedWorkers = Array.from(workers.entries()).sort((a, b) => a[0] - b[0]);
+  const [id, info] = sortedWorkers[0];
+  
+  console.log(chalk.blue(`Scaling down: removing worker ${id}...`));
+  
+  const worker = findClusterWorker(info.pid);
+  if (worker) {
+    info.state = 'draining';
+    
+    try {
+      worker.send('shutdown');
+    } catch {
+      // Ignore
+    }
+    
+    worker.disconnect();
+    await waitForExit(worker, GRACE_TIMEOUT);
+  }
+  
+  workers.delete(id);
+  console.log(chalk.green(`✓ Worker ${id} removed`));
 }
 
 /**
