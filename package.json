@@ -1,0 +1,45 @@
+{
+  "name": "gpd-runtime",
+  "version": "0.1.0",
+  "description": "Zero-downtime Node.js cluster runtime - the runtime companion to gpd (git-push-deploy)",
+  "keywords": [
+    "cluster",
+    "zero-downtime",
+    "reload",
+    "process-manager",
+    "pm2-alternative",
+    "gpd"
+  ],
+  "author": "Andreas Schulz",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aschulz-kairox/gpd-runtime.git"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "gpd-runtime": "dist/cli.js",
+    "gpdr": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "node --test dist/**/*.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "chalk": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
