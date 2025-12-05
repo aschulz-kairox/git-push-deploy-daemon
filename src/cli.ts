@@ -84,6 +84,7 @@ const { values, positionals } = parseArgs({
     'health-url': { type: 'string' },
     'health-interval': { type: 'string' },
     'health-threshold': { type: 'string' },
+    daemon: { type: 'boolean', short: 'd' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
   },
@@ -137,6 +138,7 @@ ${chalk.bold('Usage:')}
 
 ${chalk.bold('Options:')}
   -w, --workers <n>       Number of workers (default: CPU count)
+  -d, --daemon            Run in background (detached)
   --ready-url <url>       URL to poll to determine worker readiness
   --health-url <url>      Health check endpoint for ongoing monitoring
   --health-interval <ms>  Health check interval (default: 30000)
@@ -146,6 +148,7 @@ ${chalk.bold('Options:')}
 
 ${chalk.bold('Examples:')}
   gpdd start dist/index.js -w 4
+  gpdd start dist/index.js -d              # Run in background
   gpdd start dist/index.js --ready-url http://localhost:3000/health
   gpdd start dist/index.js --health-url http://localhost:3000/health
   gpdd reload
@@ -198,6 +201,48 @@ async function handleStart() {
         threshold: parseInt(values['health-threshold'] || '3', 10),
       }
     : undefined;
+
+  // Daemon mode: spawn detached process
+  if (values.daemon) {
+    const { spawn } = await import('node:child_process');
+    
+    // Build args for the child process (without -d/--daemon)
+    const childArgs = ['start', appFile];
+    if (values.workers) childArgs.push('-w', values.workers);
+    if (values['ready-url']) childArgs.push('--ready-url', values['ready-url']);
+    if (values['health-url']) childArgs.push('--health-url', values['health-url']);
+    if (values['health-interval']) childArgs.push('--health-interval', values['health-interval']);
+    if (values['health-threshold']) childArgs.push('--health-threshold', values['health-threshold']);
+    
+    // Log file path (same directory as .gpdd.pid)
+    const logFile = path.join(process.cwd(), '.gpdd.log');
+    const logFd = fs.openSync(logFile, 'a');
+    
+    const child = spawn(process.execPath, [process.argv[1], ...childArgs], {
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
+      cwd: process.cwd(),
+      env: process.env,
+    });
+    
+    child.unref();
+    fs.closeSync(logFd);
+    
+    console.log(chalk.green(`✓ Started in background (PID ${child.pid})`));
+    console.log(chalk.dim(`  Log: ${logFile}`));
+    
+    // Wait a moment to check if it started successfully
+    await new Promise(r => setTimeout(r, 1000));
+    
+    const newPid = readPidFile();
+    if (newPid) {
+      console.log(chalk.green(`✓ Master running (PID ${newPid})`));
+    } else {
+      console.log(chalk.yellow('  Waiting for startup...'));
+    }
+    
+    return;
+  }
 
   console.log(chalk.blue(`Starting ${appFile}...`));
   await startMaster(appFile, { numWorkers, healthCheck, readyUrl });
