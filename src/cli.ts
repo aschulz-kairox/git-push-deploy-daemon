@@ -10,16 +10,77 @@
  */
 
 import { parseArgs } from 'node:util';
+import path from 'node:path';
 import chalk from 'chalk';
 import { startMaster } from './master.js';
 import { getStatus, sendCommand } from './ipc.js';
 import { readPidFile, PID_FILE } from './pid.js';
 import fs from 'node:fs';
 
+/**
+ * Load .env file from app directory into process.env
+ * Searches for .env in the app file's directory and parent directories
+ */
+function loadEnvFile(appFile: string): void {
+  const appPath = path.resolve(appFile);
+  let searchDir = path.dirname(appPath);
+  let envPath: string | null = null;
+  
+  // Search for .env in current dir and parent directories (up to 3 levels)
+  for (let i = 0; i < 3; i++) {
+    const candidate = path.join(searchDir, '.env');
+    if (fs.existsSync(candidate)) {
+      envPath = candidate;
+      break;
+    }
+    const parent = path.dirname(searchDir);
+    if (parent === searchDir) break; // reached root
+    searchDir = parent;
+  }
+  
+  if (!envPath) {
+    console.log(chalk.dim(`No .env file found (searched from ${path.dirname(appPath)})`));
+    return;
+  }
+  
+  console.log(chalk.dim(`Loading .env from: ${envPath}`));
+  
+  const content = fs.readFileSync(envPath, 'utf8');
+  let loaded = 0;
+  
+  content.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return;
+    
+    const eqIndex = trimmed.indexOf('=');
+    if (eqIndex === -1) return;
+    
+    const key = trimmed.slice(0, eqIndex).trim();
+    let value = trimmed.slice(eqIndex + 1);
+    
+    // Remove surrounding quotes if present
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    
+    // Only set if not already defined (env vars take precedence)
+    if (key && process.env[key] === undefined) {
+      process.env[key] = value;
+      loaded++;
+    }
+  });
+  
+  if (loaded > 0) {
+    console.log(chalk.dim(`Loaded ${loaded} variables from ${envPath}`));
+  }
+}
+
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     workers: { type: 'string', short: 'w' },
+    'ready-url': { type: 'string' },
     'health-url': { type: 'string' },
     'health-interval': { type: 'string' },
     'health-threshold': { type: 'string' },
@@ -76,7 +137,8 @@ ${chalk.bold('Usage:')}
 
 ${chalk.bold('Options:')}
   -w, --workers <n>       Number of workers (default: CPU count)
-  --health-url <url>      Health check endpoint (e.g., http://localhost:3000/health)
+  --ready-url <url>       URL to poll to determine worker readiness
+  --health-url <url>      Health check endpoint for ongoing monitoring
   --health-interval <ms>  Health check interval (default: 30000)
   --health-threshold <n>  Failures before reload (default: 3)
   -h, --help              Show this help
@@ -84,13 +146,15 @@ ${chalk.bold('Options:')}
 
 ${chalk.bold('Examples:')}
   gpdd start dist/index.js -w 4
+  gpdd start dist/index.js --ready-url http://localhost:3000/health
   gpdd start dist/index.js --health-url http://localhost:3000/health
   gpdd reload
   gpdd stop
 
 ${chalk.bold('Environment:')}
   GPDD_WORKERS        Number of workers
-  GPDD_HEALTH_URL     Health check URL
+  GPDD_READY_URL      Ready check URL (polled until healthy)
+  GPDD_HEALTH_URL     Health check URL (ongoing monitoring)
   GPDD_GRACE_TIMEOUT  Shutdown timeout in ms (default: 30000)
   GPDD_READY_TIMEOUT  Worker ready timeout in ms (default: 10000)
 `);
@@ -102,6 +166,9 @@ async function handleStart() {
     console.error('Usage: gpdr start <app.js>');
     process.exit(1);
   }
+
+  // Load .env file from app directory
+  loadEnvFile(appFile);
 
   // Check if already running
   const existingPid = readPidFile();
@@ -119,7 +186,10 @@ async function handleStart() {
 
   const numWorkers = parseInt(values.workers || process.env.GPDD_WORKERS || '0', 10);
   
-  // Health check options
+  // Ready check URL (polled until healthy to mark worker as ready)
+  const readyUrl = values['ready-url'] || process.env.GPDD_READY_URL;
+  
+  // Health check options (ongoing monitoring)
   const healthUrl = values['health-url'] || process.env.GPDD_HEALTH_URL;
   const healthCheck = healthUrl
     ? {
@@ -130,7 +200,7 @@ async function handleStart() {
     : undefined;
 
   console.log(chalk.blue(`Starting ${appFile}...`));
-  await startMaster(appFile, { numWorkers, healthCheck });
+  await startMaster(appFile, { numWorkers, healthCheck, readyUrl });
 }
 
 async function handleReload() {

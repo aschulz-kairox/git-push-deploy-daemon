@@ -15,13 +15,15 @@ import path from 'node:path';
 import chalk from 'chalk';
 import { writePidFile, removePidFile } from './pid.js';
 import { startStatusServer, stopStatusServer, getState } from './ipc.js';
-import { startHealthCheck, stopHealthCheck, type HealthCheckOptions } from './health.js';
+import { startHealthCheck, stopHealthCheck, checkHealth, type HealthCheckOptions } from './health.js';
 
 export interface MasterOptions {
   numWorkers?: number;
   graceTimeout?: number;
   readyTimeout?: number;
   healthCheck?: HealthCheckOptions;
+  /** URL to poll to determine if worker is ready (e.g., http://localhost:3000/health) */
+  readyUrl?: string;
 }
 
 interface WorkerInfo {
@@ -37,9 +39,11 @@ let workers: Map<number, WorkerInfo> = new Map();
 let isShuttingDown = false;
 let isReloading = false;
 let startTime: number;
+let readyUrl: string | undefined;
 
 const GRACE_TIMEOUT = parseInt(process.env.GPDD_GRACE_TIMEOUT || '30000', 10);
 const READY_TIMEOUT = parseInt(process.env.GPDD_READY_TIMEOUT || '10000', 10);
+const READY_CHECK_INTERVAL = 500; // Poll ready URL every 500ms
 
 /**
  * Start the master process
@@ -47,12 +51,16 @@ const READY_TIMEOUT = parseInt(process.env.GPDD_READY_TIMEOUT || '10000', 10);
 export async function startMaster(app: string, options: MasterOptions = {}): Promise<void> {
   appFile = path.resolve(app);
   startTime = Date.now();
+  readyUrl = options.readyUrl;
   
   const numWorkers = options.numWorkers || parseInt(process.env.GPDD_WORKERS || '0', 10) || os.cpus().length;
   
   console.log(chalk.blue(`Master PID: ${process.pid}`));
   console.log(chalk.blue(`Workers: ${numWorkers}`));
   console.log(chalk.blue(`App: ${appFile}`));
+  if (readyUrl) {
+    console.log(chalk.blue(`Ready URL: ${readyUrl}`));
+  }
   
   // Write PID file
   writePidFile(process.pid);
@@ -130,7 +138,7 @@ export async function startMaster(app: string, options: MasterOptions = {}): Pro
 }
 
 /**
- * Fork a new worker
+ * Fork a new worker and start ready-check polling
  */
 function forkWorker(): Worker {
   const worker = cluster.fork();
@@ -146,7 +154,47 @@ function forkWorker(): Worker {
   workers.set(id, info);
   console.log(chalk.blue(`Forked worker ${id} (PID ${info.pid})`));
   
+  // Start ready-check polling if readyUrl is configured
+  if (readyUrl) {
+    pollReadyUrl(id, readyUrl);
+  }
+  // Note: if no readyUrl, worker stays 'starting' until process.send('ready')
+  // or until it's marked ready during reload via waitForReady()
+  
   return worker;
+}
+
+/**
+ * Poll ready URL until server responds or timeout
+ * Any HTTP response (even 404) means the server is up and ready
+ */
+async function pollReadyUrl(workerId: number, url: string): Promise<void> {
+  const deadline = Date.now() + READY_TIMEOUT;
+  
+  while (Date.now() < deadline) {
+    const info = workers.get(workerId);
+    if (!info || info.state !== 'starting') {
+      return; // Worker no longer starting (already ready, or died)
+    }
+    
+    // Accept any HTTP response (even 404) as "ready" - it means server is up
+    const result = await checkHealth(url, 2000, 200);
+    if (result.status !== undefined) {
+      // Got an HTTP response - server is ready
+      info.state = 'ready';
+      console.log(chalk.green(`Worker ${workerId} ready (HTTP ${result.status}, ${result.latencyMs}ms)`));
+      return;
+    }
+    
+    // No response yet (connection error) - wait before next poll
+    await new Promise(resolve => setTimeout(resolve, READY_CHECK_INTERVAL));
+  }
+  
+  // Timeout reached - log warning but don't change state
+  const info = workers.get(workerId);
+  if (info && info.state === 'starting') {
+    console.log(chalk.yellow(`Worker ${workerId} ready-check timeout (still starting)`));
+  }
 }
 
 /**

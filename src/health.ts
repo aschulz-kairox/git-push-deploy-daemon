@@ -114,7 +114,13 @@ export function checkHealth(
     const isHttps = url.startsWith('https://');
     const client = isHttps ? https : http;
 
-    const req = client.get(url, { timeout }, (res) => {
+    // Allow self-signed certificates for localhost/internal checks
+    const options = { 
+      timeout,
+      rejectUnauthorized: false,
+    };
+
+    const req = client.get(url, options, (res) => {
       const latencyMs = Date.now() - startTime;
       const healthy = res.statusCode === expectedStatus;
 

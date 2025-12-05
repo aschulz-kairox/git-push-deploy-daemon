@@ -3,12 +3,15 @@
  * 
  * Uses a simple HTTP server on localhost for cross-platform compatibility.
  * The port is written to a file next to the PID file.
+ * 
+ * Also serves an embedded web dashboard at /dashboard
  */
 
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { PID_FILE } from './pid.js';
+import { getDashboardHTML } from './dashboard.js';
 
 export interface WorkerStatus {
   id: number;
@@ -28,6 +31,7 @@ const PORT_FILE = PID_FILE.replace('.pid', '.port');
 let server: http.Server | null = null;
 let statusCallback: (() => RuntimeStatus) | null = null;
 let commandCallback: ((cmd: string) => void) | null = null;
+let serverPort: number = 0;
 
 /**
  * Start IPC server (called by master)
@@ -41,8 +45,27 @@ export function startStatusServer(
 
   return new Promise((resolve, reject) => {
     server = http.createServer((req, res) => {
-      // CORS for potential future web UI
+      // CORS for web dashboard
       res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+      // Handle preflight
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      // Dashboard routes
+      if (req.method === 'GET' && (req.url === '/' || req.url === '/dashboard')) {
+        res.setHeader('Content-Type', 'text/html');
+        res.writeHead(200);
+        res.end(getDashboardHTML(serverPort));
+        return;
+      }
+
+      // API routes
       res.setHeader('Content-Type', 'application/json');
 
       if (req.method === 'GET' && req.url === '/status') {
@@ -84,12 +107,12 @@ export function startStatusServer(
     // Listen on random port on localhost only
     server.listen(0, '127.0.0.1', () => {
       const addr = server!.address();
-      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      serverPort = typeof addr === 'object' && addr ? addr.port : 0;
       
       // Write port to file
-      fs.writeFileSync(PORT_FILE, String(port));
+      fs.writeFileSync(PORT_FILE, String(serverPort));
       
-      resolve(port);
+      resolve(serverPort);
     });
 
     server.on('error', reject);
