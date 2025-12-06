@@ -63,11 +63,13 @@ let serverPort: number = 0;
 /**
  * Start IPC server (called by master)
  * @param preferredPort If > 0, use this port; otherwise use random port
+ * @param bindAddress IP to bind to (default: 127.0.0.1)
  */
 export function startStatusServer(
   getStatus: () => RuntimeStatus,
   onCommand?: (cmd: string) => void,
-  preferredPort?: number
+  preferredPort?: number,
+  bindAddress: string = '127.0.0.1'
 ): Promise<number> {
   statusCallback = getStatus;
   commandCallback = onCommand || null;
@@ -157,9 +159,9 @@ export function startStatusServer(
       res.end(JSON.stringify({ error: 'not found' }));
     });
 
-    // Listen on specified port (or random if 0) on localhost only
+    // Listen on specified port (or random if 0) on specified address
     const listenPort = preferredPort && preferredPort > 0 ? preferredPort : 0;
-    server.listen(listenPort, '127.0.0.1', () => {
+    server.listen(listenPort, bindAddress, () => {
       const addr = server!.address();
       serverPort = typeof addr === 'object' && addr ? addr.port : 0;
       

@@ -26,6 +26,8 @@ export interface MasterOptions {
   readyUrl?: string;
   /** Fixed IPC port (default: random) */
   ipcPort?: number;
+  /** Bind address for IPC server (default: 127.0.0.1, use 0.0.0.0 for remote access) */
+  bindAddress?: string;
 }
 
 interface WorkerInfo {
@@ -70,6 +72,7 @@ export async function startMaster(app: string, options: MasterOptions = {}): Pro
   
   // Start IPC server with command handler
   const ipcPort = options.ipcPort || parseInt(process.env.GPDD_IPC_PORT || '0', 10);
+  const bindAddress = options.bindAddress || process.env.GPDD_BIND || '127.0.0.1';
   const port = await startStatusServer(
     () => getState(appFile, startTime, workers),
     (cmd) => {
@@ -78,9 +81,10 @@ export async function startMaster(app: string, options: MasterOptions = {}): Pro
       if (cmd === 'scale-up') handleScaleUp();
       if (cmd === 'scale-down') handleScaleDown();
     },
-    ipcPort
+    ipcPort,
+    bindAddress
   );
-  console.log(chalk.gray(`IPC server on port ${port}`));
+  console.log(chalk.gray(`IPC server on ${bindAddress}:${port}`));
   
   // Setup cluster
   cluster.setupPrimary({

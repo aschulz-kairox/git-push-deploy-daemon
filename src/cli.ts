@@ -81,6 +81,7 @@ const { values, positionals } = parseArgs({
   options: {
     workers: { type: 'string', short: 'w' },
     'ipc-port': { type: 'string', short: 'p' },
+    bind: { type: 'string', short: 'b' },
     'ready-url': { type: 'string' },
     'health-url': { type: 'string' },
     'health-interval': { type: 'string' },
@@ -140,6 +141,7 @@ ${chalk.bold('Usage:')}
 ${chalk.bold('Options:')}
   -w, --workers <n>       Number of workers (default: CPU count)
   -p, --ipc-port <port>   Fixed IPC port (default: random)
+  -b, --bind <ip>         Bind IPC to IP (default: 127.0.0.1, use 0.0.0.0 for remote)
   -d, --daemon            Run in background (detached)
   --ready-url <url>       URL to poll to determine worker readiness
   --health-url <url>      Health check endpoint for ongoing monitoring
@@ -158,6 +160,7 @@ ${chalk.bold('Examples:')}
 ${chalk.bold('Environment:')}
   GPDD_WORKERS        Number of workers
   GPDD_IPC_PORT       Fixed IPC port (default: random)
+  GPDD_BIND           Bind IPC to IP (default: 127.0.0.1)
   GPDD_READY_URL      Ready check URL (polled until healthy)
   GPDD_HEALTH_URL     Health check URL (ongoing monitoring)
   GPDD_GRACE_TIMEOUT  Shutdown timeout in ms (default: 30000)
@@ -195,6 +198,7 @@ async function handleStart() {
 
   const numWorkers = parseInt(values.workers || process.env.GPDD_WORKERS || '0', 10);
   const ipcPort = parseInt(values['ipc-port'] || process.env.GPDD_IPC_PORT || '0', 10);
+  const bindAddress = values.bind || process.env.GPDD_BIND || '127.0.0.1';
   
   // Ready check URL (polled until healthy to mark worker as ready)
   const readyUrl = values['ready-url'] || process.env.GPDD_READY_URL;
@@ -217,6 +221,7 @@ async function handleStart() {
     const childArgs = ['start', appFile];
     if (values.workers) childArgs.push('-w', values.workers);
     if (values['ipc-port']) childArgs.push('-p', values['ipc-port']);
+    if (values.bind) childArgs.push('-b', values.bind);
     if (values['ready-url']) childArgs.push('--ready-url', values['ready-url']);
     if (values['health-url']) childArgs.push('--health-url', values['health-url']);
     if (values['health-interval']) childArgs.push('--health-interval', values['health-interval']);
@@ -253,7 +258,7 @@ async function handleStart() {
   }
 
   console.log(chalk.blue(`Starting ${appFile}...`));
-  await startMaster(appFile, { numWorkers, ipcPort, healthCheck, readyUrl });
+  await startMaster(appFile, { numWorkers, ipcPort, bindAddress, healthCheck, readyUrl });
 }
 
 async function handleReload() {
