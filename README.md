@@ -162,6 +162,7 @@ gpdd reload
 ├────────────────┼───────────────────────────────────────────────────────────┤
 │ -w, --workers  │ Number of workers (default: CPU count)                    │
 │ -d, --daemon   │ Run in background (detached mode)                         │
+│ --ipc-port     │ Fixed IPC port (default: random, saved to .gpdd.port)     │
 │ --ready-url    │ URL to poll for ready check (e.g., http://localhost:3000) │
 │ -n, --lines    │ Number of log lines to show                               │
 │ -f, --follow   │ Follow logs in real-time                                  │
@@ -240,16 +241,33 @@ server.listen(process.env.PORT || 3000, () => {
   console.log(`Worker ${process.pid} listening`);
 });
 
-// Handle graceful shutdown
+// Graceful shutdown handler
+function gracefulShutdown(signal) {
+  console.log(`Worker ${process.pid} received ${signal}, shutting down...`);
+  server.close(() => {
+    console.log(`Worker ${process.pid} closed`);
+    process.exit(0);
+  });
+  // Force exit after timeout if server doesn't close
+  setTimeout(() => process.exit(0), 5000);
+}
+
+// Handle gpdd shutdown message (IPC)
 process.on('message', (msg) => {
-  if (msg === 'shutdown') {
-    console.log(`Worker ${process.pid} shutting down...`);
-    server.close(() => {
-      process.exit(0);
-    });
-  }
+  if (msg === 'shutdown') gracefulShutdown('shutdown');
 });
+
+// Handle disconnect (gpdd calls worker.disconnect() during reload)
+// This is the fastest way to detect that gpdd wants us to shut down
+process.on('disconnect', () => gracefulShutdown('disconnect'));
+
+// Handle standard signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 ```
+
+> **Tip:** Implementing `process.on('disconnect')` enables faster worker draining during
+> reload and scale-down operations (no need to wait for the 30-second grace timeout).
 
 ## 🏗️ Architecture
 
