@@ -31,6 +31,15 @@ export interface SystemMemory {
   freePercent: number;
 }
 
+export interface AutostartInfo {
+  /** Whether autostart is enabled (systemd unit exists and is enabled) */
+  enabled: boolean;
+  /** Configured number of workers in systemd unit */
+  configuredWorkers?: number;
+  /** Service name (from systemd unit) */
+  serviceName?: string;
+}
+
 export interface RuntimeStatus {
   appFile: string;
   startTime: number;
@@ -39,6 +48,8 @@ export interface RuntimeStatus {
   appMemoryMB?: number;
   /** System memory info */
   system?: SystemMemory;
+  /** Autostart configuration (systemd) */
+  autostart?: AutostartInfo;
 }
 
 const PORT_FILE = PID_FILE.replace('.pid', '.port');
@@ -288,6 +299,52 @@ function getSystemMemory(): SystemMemory | undefined {
 }
 
 /**
+ * Get autostart info from systemd (Linux only)
+ * Looks for a systemd service that matches the current working directory
+ */
+function getAutostartInfo(): AutostartInfo | undefined {
+  try {
+    const { execSync } = require('child_process');
+    const cwd = process.cwd();
+    
+    // Find systemd services that have our WorkingDirectory
+    // This searches all kairox-*.service files
+    const servicesOutput = execSync(
+      `grep -l "WorkingDirectory=${cwd}" /etc/systemd/system/*.service 2>/dev/null || true`,
+      { encoding: 'utf-8', timeout: 2000 }
+    ).trim();
+    
+    if (!servicesOutput) {
+      return { enabled: false };
+    }
+    
+    // Get the first matching service file
+    const serviceFile = servicesOutput.split('\n')[0];
+    const serviceName = path.basename(serviceFile, '.service');
+    
+    // Check if enabled
+    const isEnabledOutput = execSync(
+      `systemctl is-enabled ${serviceName} 2>/dev/null || echo disabled`,
+      { encoding: 'utf-8', timeout: 2000 }
+    ).trim();
+    const enabled = isEnabledOutput === 'enabled';
+    
+    // Parse worker count from ExecStart line
+    let configuredWorkers: number | undefined;
+    const serviceContent = fs.readFileSync(serviceFile, 'utf-8');
+    const workersMatch = serviceContent.match(/--workers\s+(\d+)/);
+    if (workersMatch) {
+      configuredWorkers = parseInt(workersMatch[1], 10);
+    }
+    
+    return { enabled, configuredWorkers, serviceName };
+  } catch {
+    // Not Linux or systemd not available
+    return undefined;
+  }
+}
+
+/**
  * Build status object (used by master)
  */
 export function getState(
@@ -312,5 +369,6 @@ export function getState(
     workers: workerList,
     appMemoryMB,
     system: getSystemMemory(),
+    autostart: getAutostartInfo(),
   };
 }
