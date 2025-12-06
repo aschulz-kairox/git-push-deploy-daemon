@@ -10,6 +10,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { PID_FILE } from './pid.js';
 import { getDashboardHTML } from './dashboard.js';
 
@@ -304,11 +305,10 @@ function getSystemMemory(): SystemMemory | undefined {
  */
 function getAutostartInfo(): AutostartInfo | undefined {
   try {
-    const { execSync } = require('child_process');
     const cwd = process.cwd();
     
     // Find systemd services that have our WorkingDirectory
-    // This searches all kairox-*.service files
+    // This searches all *.service files
     const servicesOutput = execSync(
       `grep -l "WorkingDirectory=${cwd}" /etc/systemd/system/*.service 2>/dev/null || true`,
       { encoding: 'utf-8', timeout: 2000 }
