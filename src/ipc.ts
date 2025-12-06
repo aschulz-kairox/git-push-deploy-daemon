@@ -50,10 +50,12 @@ let serverPort: number = 0;
 
 /**
  * Start IPC server (called by master)
+ * @param preferredPort If > 0, use this port; otherwise use random port
  */
 export function startStatusServer(
   getStatus: () => RuntimeStatus,
-  onCommand?: (cmd: string) => void
+  onCommand?: (cmd: string) => void,
+  preferredPort?: number
 ): Promise<number> {
   statusCallback = getStatus;
   commandCallback = onCommand || null;
@@ -143,8 +145,9 @@ export function startStatusServer(
       res.end(JSON.stringify({ error: 'not found' }));
     });
 
-    // Listen on random port on localhost only
-    server.listen(0, '127.0.0.1', () => {
+    // Listen on specified port (or random if 0) on localhost only
+    const listenPort = preferredPort && preferredPort > 0 ? preferredPort : 0;
+    server.listen(listenPort, '127.0.0.1', () => {
       const addr = server!.address();
       serverPort = typeof addr === 'object' && addr ? addr.port : 0;
       

@@ -24,6 +24,8 @@ export interface MasterOptions {
   healthCheck?: HealthCheckOptions;
   /** URL to poll to determine if worker is ready (e.g., http://localhost:3000/health) */
   readyUrl?: string;
+  /** Fixed IPC port (default: random) */
+  ipcPort?: number;
 }
 
 interface WorkerInfo {
@@ -67,6 +69,7 @@ export async function startMaster(app: string, options: MasterOptions = {}): Pro
   writePidFile(process.pid);
   
   // Start IPC server with command handler
+  const ipcPort = options.ipcPort || parseInt(process.env.GPDD_IPC_PORT || '0', 10);
   const port = await startStatusServer(
     () => getState(appFile, startTime, workers),
     (cmd) => {
@@ -74,7 +77,8 @@ export async function startMaster(app: string, options: MasterOptions = {}): Pro
       if (cmd === 'stop') handleShutdown();
       if (cmd === 'scale-up') handleScaleUp();
       if (cmd === 'scale-down') handleScaleDown();
-    }
+    },
+    ipcPort
   );
   console.log(chalk.gray(`IPC server on port ${port}`));
   
